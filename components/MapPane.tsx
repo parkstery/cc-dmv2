@@ -232,6 +232,9 @@ const MapPane: React.FC<MapPaneProps> = ({
       disableDefaultUI: false,
       zoomControl: true,
       streetViewControl: true,
+      streetViewControlOptions: {
+        position: window.google.maps.ControlPosition.TOP_RIGHT
+      },
       fullscreenControl: false,
       streetView: panorama,
       gestureHandling: 'greedy'
@@ -1575,7 +1578,7 @@ const MapPane: React.FC<MapPaneProps> = ({
         ref={containerRef} 
         className={`transition-all duration-300 ease-in-out bg-white
           ${isStreetViewActive 
-            ? 'absolute top-3 left-3 w-[240px] h-[240px] z-[100] border-4 border-white shadow-2xl rounded-lg overflow-hidden' 
+            ? 'absolute bottom-3 left-3 w-[240px] h-[240px] z-[100] border-4 border-white shadow-2xl rounded-lg overflow-hidden' 
             : 'w-full h-full z-0'
           }`}
       />
@@ -1611,11 +1614,11 @@ const MapPane: React.FC<MapPaneProps> = ({
         }}
       />
 
-      {/* 3. Close Button (Square Icon) - 네이버맵은 우하단, 다른 맵은 우상단 */}
+      {/* 3. Close Button (Square Icon) - 모든 맵에서 우상단 */}
       {isStreetViewActive && (
         <button 
           onClick={closeStreetView}
-          className={`absolute z-[110] bg-white text-gray-800 w-10 h-10 flex items-center justify-center shadow-lg rounded-sm hover:bg-gray-100 transition-colors border border-gray-300 ${config.type === 'naver' ? 'bottom-4 right-4' : 'top-4 right-4'}`}
+          className="absolute z-[110] bg-white text-gray-800 w-10 h-10 flex items-center justify-center shadow-lg rounded-sm hover:bg-gray-100 transition-colors border border-gray-300 top-4 right-4"
           title="거리뷰 닫기"
         >
           <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current">
@@ -1631,13 +1634,17 @@ const MapPane: React.FC<MapPaneProps> = ({
          </div>
       )}
 
-      {/* 전체화면 버튼 - 네이버맵은 우하단, 다른 맵은 우상단 */}
+      {/* 전체화면 버튼 - 모든 맵에서 우상단, 거리뷰 활성화 시 오른쪽으로 이동 */}
       <button 
         onClick={onToggleFullscreen}
-        className={`absolute z-[110] bg-white p-1.5 rounded shadow border border-gray-300 hover:bg-gray-50 transition-colors ${
-          config.type === 'naver' 
-            ? `bottom-4 ${isStreetViewActive ? 'right-16' : 'right-4'}` 
-            : `top-4 ${isStreetViewActive ? 'right-16' : config.type === 'kakao' ? 'right-[280px]' : 'right-16'}`
+        className={`absolute z-[110] bg-white p-1.5 rounded shadow border border-gray-300 hover:bg-gray-50 transition-colors top-4 ${
+          isStreetViewActive 
+            ? 'right-16' 
+            : config.type === 'kakao' 
+              ? 'right-[280px]' 
+              : config.type === 'google'
+                ? 'right-16'  // 구글맵 pegman 옆에 배치
+                : 'right-4'   // 네이버맵
         }`}
         title="전체화면"
       >
@@ -1648,11 +1655,11 @@ const MapPane: React.FC<MapPaneProps> = ({
         )}
       </button>
       
-      {/* 네이버 거리뷰 버튼 - 우하단 배치 */}
+      {/* 네이버 거리뷰 버튼 - 우상단 배치 */}
       {config.type === 'naver' && (
         <button 
           onClick={toggleNaverStreetLayer} 
-          className={`absolute bottom-4 z-[110] w-10 h-10 flex items-center justify-center rounded shadow border transition-colors ${isStreetViewActive ? 'right-28' : 'right-16'} ${isNaverLayerOn ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+          className={`absolute top-4 z-[110] w-10 h-10 flex items-center justify-center rounded shadow border transition-colors ${isStreetViewActive ? 'right-28' : 'right-16'} ${isNaverLayerOn ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
           title={isNaverLayerOn ? '거리뷰 끄기' : '거리뷰 켜기'}
         >
           <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
