@@ -429,14 +429,18 @@ const MapPane: React.FC<MapPaneProps> = ({
 
   const initNaverPanorama = (container: HTMLDivElement, latlng: any, map: any) => {
     try {
-      // 컨테이너 스타일 확인 및 조정 (상단 여백 제거)
+      // 컨테이너 스타일 확인 및 조정 (전체 영역 채우기 보장)
       if (container) {
-        container.style.margin = '0';
-        container.style.padding = '0';
+        container.style.position = 'absolute';
         container.style.top = '0';
         container.style.left = '0';
         container.style.right = '0';
         container.style.bottom = '0';
+        container.style.width = '100%';
+        container.style.height = '100%';
+        container.style.margin = '0';
+        container.style.padding = '0';
+        container.style.boxSizing = 'border-box';
       }
       
       const pano = new window.naver.maps.Panorama(container, {
@@ -458,9 +462,16 @@ const MapPane: React.FC<MapPaneProps> = ({
           mapRef.current.setCenter(actualPos);
         }
         // 파노라마 초기화 후 리사이즈 이벤트 트리거 (렌더링 보장)
+        // 컨테이너 크기가 확실히 설정된 후 리사이즈
         setTimeout(() => {
-          window.naver.maps.Event.trigger(pano, 'resize');
-        }, 100);
+          if (container && container.offsetWidth > 0 && container.offsetHeight > 0) {
+            window.naver.maps.Event.trigger(pano, 'resize');
+            // 추가로 한 번 더 리사이즈 (렌더링 보장)
+            setTimeout(() => {
+              window.naver.maps.Event.trigger(pano, 'resize');
+            }, 50);
+          }
+        }, 150);
       });
 
       // 파노라마 로드 실패 이벤트
@@ -1584,17 +1595,19 @@ const MapPane: React.FC<MapPaneProps> = ({
 
       <div 
         ref={naverPanoContainerRef}
-        className={`absolute inset-0 bg-black transition-opacity duration-300 
+        className={`absolute bg-black transition-opacity duration-300 
            ${config.type === 'naver' && isStreetViewActive ? 'z-10 opacity-100 pointer-events-auto' : 'z-[-1] opacity-0 pointer-events-none'}`}
         style={{
-          width: config.type === 'naver' && isStreetViewActive ? '100%' : '0',
-          height: config.type === 'naver' && isStreetViewActive ? '100%' : '0',
+          position: 'absolute',
           top: config.type === 'naver' && isStreetViewActive ? '0' : 'auto',
           left: config.type === 'naver' && isStreetViewActive ? '0' : 'auto',
           right: config.type === 'naver' && isStreetViewActive ? '0' : 'auto',
           bottom: config.type === 'naver' && isStreetViewActive ? '0' : 'auto',
+          width: config.type === 'naver' && isStreetViewActive ? '100%' : '0',
+          height: config.type === 'naver' && isStreetViewActive ? '100%' : '0',
           margin: 0,
-          padding: 0
+          padding: 0,
+          boxSizing: 'border-box'
         }}
       />
 
