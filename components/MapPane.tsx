@@ -432,23 +432,25 @@ const MapPane: React.FC<MapPaneProps> = ({
 
     // 방향 각도를 라디안으로 변환 (카카오맵은 시계방향, 북쪽이 0도)
     // 카카오맵 각도: 북쪽 0도, 시계방향 증가
-    const angleRad = ((angle - 90) * Math.PI) / 180; // 지도 좌표계로 변환 (동쪽이 0도)
+    // walker와 동일한 방향을 위해 각도를 그대로 사용 (변환 없음)
+    const angleRad = (angle * Math.PI) / 180;
 
     // 원뿔 끝점 계산 (방향으로 coneRadius만큼 이동)
-    const endLat = centerLat + coneRadiusLat * Math.sin(angleRad);
-    const endLng = centerLng + coneRadiusLng * Math.cos(angleRad);
+    // 북쪽이 0도이므로, 북쪽 방향은 위쪽(위도 증가), 동쪽 방향은 오른쪽(경도 증가)
+    const endLat = centerLat + coneRadiusLat * Math.cos(angleRad);
+    const endLng = centerLng + coneRadiusLng * Math.sin(angleRad);
     const endPos = new window.kakao.maps.LatLng(endLat, endLng);
 
     // 원뿔 좌우 끝점 계산 (원뿔의 30% 지점)
     const leftAngleRad = angleRad - (coneHalfAngle * Math.PI) / 180;
     const rightAngleRad = angleRad + (coneHalfAngle * Math.PI) / 180;
 
-    const leftLat = centerLat + coneRadiusLat * 0.3 * Math.sin(leftAngleRad);
-    const leftLng = centerLng + coneRadiusLng * 0.3 * Math.cos(leftAngleRad);
+    const leftLat = centerLat + coneRadiusLat * 0.3 * Math.cos(leftAngleRad);
+    const leftLng = centerLng + coneRadiusLng * 0.3 * Math.sin(leftAngleRad);
     const leftPos = new window.kakao.maps.LatLng(leftLat, leftLng);
 
-    const rightLat = centerLat + coneRadiusLat * 0.3 * Math.sin(rightAngleRad);
-    const rightLng = centerLng + coneRadiusLng * 0.3 * Math.cos(rightAngleRad);
+    const rightLat = centerLat + coneRadiusLat * 0.3 * Math.cos(rightAngleRad);
+    const rightLng = centerLng + coneRadiusLng * 0.3 * Math.sin(rightAngleRad);
     const rightPos = new window.kakao.maps.LatLng(rightLat, rightLng);
 
     // 원뿔형 폴리곤 경로 (역삼각형: 중심점 -> 좌측 -> 끝점 -> 우측 -> 중심점)
@@ -583,23 +585,25 @@ const MapPane: React.FC<MapPaneProps> = ({
 
     // 방향 각도를 라디안으로 변환 (네이버맵은 시계방향, 북쪽이 0도)
     // 네이버맵 각도: 북쪽 0도, 시계방향 증가
-    const angleRad = ((angle - 90) * Math.PI) / 180; // 지도 좌표계로 변환 (동쪽이 0도)
+    // 빨간 삼각형 마커와 동일한 방향을 위해 각도를 그대로 사용 (변환 없음)
+    const angleRad = (angle * Math.PI) / 180;
 
     // 원뿔 끝점 계산 (방향으로 coneRadius만큼 이동)
-    const endLat = centerLat + coneRadiusLat * Math.sin(angleRad);
-    const endLng = centerLng + coneRadiusLng * Math.cos(angleRad);
+    // 북쪽이 0도이므로, 북쪽 방향은 위쪽(위도 증가), 동쪽 방향은 오른쪽(경도 증가)
+    const endLat = centerLat + coneRadiusLat * Math.cos(angleRad);
+    const endLng = centerLng + coneRadiusLng * Math.sin(angleRad);
     const endPos = new window.naver.maps.LatLng(endLat, endLng);
 
     // 원뿔 좌우 끝점 계산 (원뿔의 30% 지점)
     const leftAngleRad = angleRad - (coneHalfAngle * Math.PI) / 180;
     const rightAngleRad = angleRad + (coneHalfAngle * Math.PI) / 180;
 
-    const leftLat = centerLat + coneRadiusLat * 0.3 * Math.sin(leftAngleRad);
-    const leftLng = centerLng + coneRadiusLng * 0.3 * Math.cos(leftAngleRad);
+    const leftLat = centerLat + coneRadiusLat * 0.3 * Math.cos(leftAngleRad);
+    const leftLng = centerLng + coneRadiusLng * 0.3 * Math.sin(leftAngleRad);
     const leftPos = new window.naver.maps.LatLng(leftLat, leftLng);
 
-    const rightLat = centerLat + coneRadiusLat * 0.3 * Math.sin(rightAngleRad);
-    const rightLng = centerLng + coneRadiusLng * 0.3 * Math.cos(rightAngleRad);
+    const rightLat = centerLat + coneRadiusLat * 0.3 * Math.cos(rightAngleRad);
+    const rightLng = centerLng + coneRadiusLng * 0.3 * Math.sin(rightAngleRad);
     const rightPos = new window.naver.maps.LatLng(rightLat, rightLng);
 
     // 원뿔형 폴리곤 경로 (역삼각형: 중심점 -> 좌측 -> 끝점 -> 우측 -> 중심점)
@@ -1932,20 +1936,18 @@ const MapPane: React.FC<MapPaneProps> = ({
          </div>
       )}
 
-      {/* 전체화면 버튼 - 모든 맵에서 우상단, 거리뷰 활성화 시 오른쪽으로 이동 */}
-      <button 
-        onClick={onToggleFullscreen}
-        className={`absolute z-[110] bg-white p-1.5 rounded shadow border border-gray-300 hover:bg-gray-50 transition-colors top-4 ${
-          isStreetViewActive 
-            ? 'right-16' 
-            : config.type === 'kakao' 
-              ? 'right-[280px]' 
-              : config.type === 'google'
-                ? 'right-16'  // 구글맵 pegman 옆에 배치
-                : 'right-4'   // 네이버맵
-        }`}
-        title="전체화면"
-      >
+       {/* 전체화면 버튼 - 모든 맵에서 우상단, 거리뷰 활성화 시 오른쪽으로 이동 */}
+       <button 
+         onClick={onToggleFullscreen}
+         className={`absolute z-[110] bg-white p-1.5 rounded shadow border border-gray-300 hover:bg-gray-50 transition-colors top-4 ${
+           isStreetViewActive 
+             ? 'right-16' 
+             : config.type === 'google'
+               ? 'right-16'  // 구글맵 pegman 옆에 배치
+               : 'right-4'   // 네이버맵, 카카오맵
+         }`}
+         title="전체화면"
+       >
         {isFullscreen ? (
           <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current text-gray-700"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
         ) : (
@@ -1968,7 +1970,12 @@ const MapPane: React.FC<MapPaneProps> = ({
       )}
       
       {config.type === 'kakao' && (
-        <KakaoGisToolbar activeMode={gisMode} onAction={handleKakaoAction} onToggleCadastral={toggleKakaoCadastral} onClear={() => {
+        <KakaoGisToolbar 
+          activeMode={gisMode} 
+          onAction={handleKakaoAction} 
+          onToggleCadastral={toggleKakaoCadastral} 
+          isStreetViewActive={isStreetViewActive}
+          onClear={() => {
               setGisMode(GISMode.DEFAULT);
               if (mapRef.current) {
                 mapRef.current.removeOverlayMapTypeId(window.kakao.maps.MapTypeId.ROADVIEW);

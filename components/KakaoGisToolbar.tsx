@@ -7,11 +7,19 @@ interface KakaoGisToolbarProps {
   onAction: (mode: GISMode) => void;
   onToggleCadastral: () => void;
   onClear: () => void;
+  isStreetViewActive?: boolean;
 }
 
-const KakaoGisToolbar: React.FC<KakaoGisToolbarProps> = ({ activeMode, onAction, onToggleCadastral, onClear }) => {
+const KakaoGisToolbar: React.FC<KakaoGisToolbarProps> = ({ activeMode, onAction, onToggleCadastral, onClear, isStreetViewActive = false }) => {
+  // 전체화면 버튼 위치에 따라 툴바 위치 조정
+  // 전체화면 버튼: right-4 (16px) 또는 right-16 (64px, 거리뷰 활성화 시)
+  // 버튼 너비: 약 32px (p-1.5 + 아이콘)
+  // 툴바 너비: 5개 버튼 × 36px = 180px
+  // 여유 공간: 4px
+  const toolbarRight = isStreetViewActive ? 'right-[84px]' : 'right-[52px]'; // 전체화면 버튼 왼쪽에 배치
+  
   return (
-    <div className="absolute top-4 right-[300px] z-20 flex bg-white rounded-md shadow-lg border border-gray-300 overflow-hidden">
+    <div className={`absolute top-4 ${toolbarRight} z-20 flex bg-white rounded-md shadow-lg border border-gray-300 overflow-hidden`}>
       <button 
         onClick={() => onAction(GISMode.ROADVIEW)}
         title="로드뷰"
