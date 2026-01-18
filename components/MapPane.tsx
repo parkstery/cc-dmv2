@@ -1959,13 +1959,10 @@ const MapPane: React.FC<MapPaneProps> = ({
       {config.type === 'naver' && (
         <button 
           onClick={toggleNaverStreetLayer} 
-          className={`absolute top-4 z-[110] w-10 h-10 flex items-center justify-center rounded shadow border transition-colors ${isStreetViewActive ? 'right-28' : 'right-16'} ${isNaverLayerOn ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+          className={`absolute top-4 z-[110] p-1.5 flex items-center justify-center rounded shadow border transition-colors ${isStreetViewActive ? 'right-28' : 'right-16'} ${isNaverLayerOn ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
           title={isNaverLayerOn ? '거리뷰 끄기' : '거리뷰 켜기'}
         >
-          <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-            <circle cx="12" cy="13" r="4"></circle>
-          </svg>
+          <img src="/streetview-icon.png" alt="거리뷰" className="w-5 h-5 object-contain" />
         </button>
       )}
       

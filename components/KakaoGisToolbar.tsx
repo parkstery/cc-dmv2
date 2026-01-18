@@ -25,7 +25,7 @@ const KakaoGisToolbar: React.FC<KakaoGisToolbarProps> = ({ activeMode, onAction,
         title="로드뷰"
         className={`w-9 h-8 flex items-center justify-center border-r border-gray-100 transition-colors ${activeMode === GISMode.ROADVIEW ? 'bg-blue-100' : 'hover:bg-gray-50'}`}
       >
-        📷
+        <img src="/streetview-icon.png" alt="로드뷰" className="w-5 h-5 object-contain" />
       </button>
       <button 
         onClick={onToggleCadastral}
