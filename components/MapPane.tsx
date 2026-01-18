@@ -41,6 +41,7 @@ const MapPane: React.FC<MapPaneProps> = ({
   const naverPanoramaRef = useRef<any>(null);
   const naverPanoContainerRef = useRef<HTMLDivElement>(null);
   const naverMarkerRef = useRef<any>(null); // Marker on Mini-map
+  const naverDirectionPolygonRef = useRef<any>(null); // 방향 표시 폴리곤 (원뿔형)
   const [isNaverLayerOn, setIsNaverLayerOn] = useState(false);
   
   // Kakao Refs & Drawing State
@@ -53,6 +54,7 @@ const MapPane: React.FC<MapPaneProps> = ({
     clickHandler?: any; 
     addressClickListener?: any;
     walkerOverlay?: any; // Walker on Mini-map
+    directionPolygon?: any; // 방향 표시 폴리곤 (원뿔형)
   }>({
     rv: null,
     rvClient: null,
@@ -153,6 +155,7 @@ const MapPane: React.FC<MapPaneProps> = ({
     if (config.type !== 'naver') {
         if (naverPanoramaRef.current) naverPanoramaRef.current = null;
         if (naverMarkerRef.current) { naverMarkerRef.current.setMap(null); naverMarkerRef.current = null; }
+        if (naverDirectionPolygonRef.current) { naverDirectionPolygonRef.current.setMap(null); naverDirectionPolygonRef.current = null; }
         if (naverPanoContainerRef.current) naverPanoContainerRef.current.innerHTML = '';
         if (naverStreetLayerRef.current) naverStreetLayerRef.current = null;
     }
@@ -166,6 +169,10 @@ const MapPane: React.FC<MapPaneProps> = ({
       if (kakaoGisRef.current.walkerOverlay) {
           kakaoGisRef.current.walkerOverlay.setMap(null);
           kakaoGisRef.current.walkerOverlay = null;
+      }
+      if (kakaoGisRef.current.directionPolygon) {
+          kakaoGisRef.current.directionPolygon.setMap(null);
+          kakaoGisRef.current.directionPolygon = null;
       }
     }
   }, [config.type]);
@@ -212,6 +219,67 @@ const MapPane: React.FC<MapPaneProps> = ({
     
     return () => clearTimeout(timer);
   }, [isStreetViewActive, config.type, globalState.lat, globalState.lng]);
+
+  // -- 미니맵 위치 재확인 (맵 API 스타일 오버라이드 방지) --
+  useEffect(() => {
+    if (isStreetViewActive && containerRef.current) {
+      // 즉시 설정
+      const setPosition = () => {
+        if (containerRef.current) {
+          // 인라인 스타일로 위치 강제 설정 (맵 API 스타일 오버라이드 방지)
+          // 직접 style 속성에 할당하여 최고 우선순위 보장
+          const element = containerRef.current;
+          element.style.position = 'absolute';
+          element.style.bottom = '12px';
+          element.style.left = '12px';
+          element.style.top = 'auto';
+          element.style.right = 'auto';
+          // CSS 변수로도 설정 (추가 보장)
+          element.style.setProperty('--minimap-bottom', '12px', '');
+          element.style.setProperty('--minimap-left', '12px', '');
+        }
+      };
+      
+      // 즉시 실행
+      setPosition();
+      
+      // 여러 시점에서 재설정 (맵 API가 스타일을 변경할 수 있으므로)
+      const timers = [
+        setTimeout(setPosition, 50),
+        setTimeout(setPosition, 100),
+        setTimeout(setPosition, 200),
+        setTimeout(setPosition, 350),  // 트랜지션 완료 후
+        setTimeout(setPosition, 500),  // 추가 확인
+        setTimeout(setPosition, 1000)   // 최종 확인
+      ];
+      
+      // MutationObserver로 스타일 변경 감지
+      let observer: MutationObserver | null = null;
+      if (containerRef.current) {
+        observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && 
+                (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
+              // 스타일이나 클래스가 변경되면 다시 설정
+              setTimeout(setPosition, 10);
+            }
+          });
+        });
+        
+        observer.observe(containerRef.current, {
+          attributes: true,
+          attributeFilter: ['style', 'class']
+        });
+      }
+      
+      return () => {
+        timers.forEach(timer => clearTimeout(timer));
+        if (observer) {
+          observer.disconnect();
+        }
+      };
+    }
+  }, [isStreetViewActive]);
 
 
   // 2. Initialize Maps
@@ -334,6 +402,66 @@ const MapPane: React.FC<MapPaneProps> = ({
     setupMapListeners('naver');
   };
 
+  // 카카오맵 방향 표시 폴리곤 생성 (원뿔형)
+  const createKakaoDirectionPolygon = useCallback((centerPos: any, angle: number, map: any) => {
+    // 기존 폴리곤 제거
+    if (kakaoGisRef.current.directionPolygon) {
+      kakaoGisRef.current.directionPolygon.setMap(null);
+      kakaoGisRef.current.directionPolygon = null;
+    }
+
+    // 원뿔형 폴리곤 파라미터
+    const coneRadiusMeters = 50; // 약 50m
+    const coneAngle = 60; // 원뿔 각도 (도)
+    const coneHalfAngle = coneAngle / 2; // 원뿔 반각
+
+    // 중심점 좌표
+    const centerLat = centerPos.getLat();
+    const centerLng = centerPos.getLng();
+
+    // 미터를 위도/경도로 변환 (지구 곡률 고려)
+    const latToMeters = 111320; // 1도 위도 ≈ 111,320m
+    const lngToMeters = 111320 * Math.cos(centerLat * Math.PI / 180); // 경도는 위도에 따라 다름
+    const coneRadiusLat = coneRadiusMeters / latToMeters;
+    const coneRadiusLng = coneRadiusMeters / lngToMeters;
+
+    // 방향 각도를 라디안으로 변환 (카카오맵은 시계방향, 북쪽이 0도)
+    // 카카오맵 각도: 북쪽 0도, 시계방향 증가
+    const angleRad = ((angle - 90) * Math.PI) / 180; // 지도 좌표계로 변환 (동쪽이 0도)
+
+    // 원뿔 끝점 계산 (방향으로 coneRadius만큼 이동)
+    const endLat = centerLat + coneRadiusLat * Math.sin(angleRad);
+    const endLng = centerLng + coneRadiusLng * Math.cos(angleRad);
+    const endPos = new window.kakao.maps.LatLng(endLat, endLng);
+
+    // 원뿔 좌우 끝점 계산 (원뿔의 30% 지점)
+    const leftAngleRad = angleRad - (coneHalfAngle * Math.PI) / 180;
+    const rightAngleRad = angleRad + (coneHalfAngle * Math.PI) / 180;
+
+    const leftLat = centerLat + coneRadiusLat * 0.3 * Math.sin(leftAngleRad);
+    const leftLng = centerLng + coneRadiusLng * 0.3 * Math.cos(leftAngleRad);
+    const leftPos = new window.kakao.maps.LatLng(leftLat, leftLng);
+
+    const rightLat = centerLat + coneRadiusLat * 0.3 * Math.sin(rightAngleRad);
+    const rightLng = centerLng + coneRadiusLng * 0.3 * Math.cos(rightAngleRad);
+    const rightPos = new window.kakao.maps.LatLng(rightLat, rightLng);
+
+    // 원뿔형 폴리곤 경로 (역삼각형: 중심점 -> 좌측 -> 끝점 -> 우측 -> 중심점)
+    const path = [centerPos, leftPos, endPos, rightPos, centerPos];
+
+    // 폴리곤 생성
+    kakaoGisRef.current.directionPolygon = new window.kakao.maps.Polygon({
+      map: map,
+      path: path,
+      strokeWeight: 0,
+      strokeColor: '#4A90E2',
+      strokeOpacity: 0,
+      fillColor: '#4A90E2',
+      fillOpacity: 0.3, // 반투명 파란색
+      zIndex: 999 // walker 아래에 표시
+    });
+  }, []);
+
   // 카카오맵 Walker 생성 헬퍼 함수 (카카오맵 공식 walker 사용, 방향 동기화)
   const createKakaoWalker = useCallback((pos: any, map: any, angle?: number) => {
     // 기존 Walker가 있으면 제거
@@ -352,7 +480,7 @@ const MapPane: React.FC<MapPaneProps> = ({
       content.style.backgroundSize = '26px 46px';
       content.style.backgroundPosition = 'center';
       content.style.backgroundRepeat = 'no-repeat';
-      content.style.transformOrigin = 'center bottom'; // 회전 중심을 하단 중앙으로 설정
+      content.style.transformOrigin = 'center center'; // 회전 중심을 중앙으로 설정 (방향 비추기)
       if (angle !== undefined) {
         content.style.transform = `rotate(${angle}deg)`;
       }
@@ -361,15 +489,25 @@ const MapPane: React.FC<MapPaneProps> = ({
         position: pos,
         content: content,
         map: map,
-        yAnchor: 1, // 하단 기준으로 앵커 설정
+        yAnchor: 0.5, // 중심 기준으로 앵커 설정 (PanoID point에 일치)
         zIndex: 1000
       });
+      
+      // 방향 표시 폴리곤 생성
+      if (angle !== undefined && map) {
+        createKakaoDirectionPolygon(pos, angle, map);
+      }
       
       // 지도 리사이즈 후 Walker 재표시 보장
       setTimeout(() => {
         if (kakaoGisRef.current.walkerOverlay && map) {
           kakaoGisRef.current.walkerOverlay.setMap(null);
           kakaoGisRef.current.walkerOverlay.setMap(map);
+        }
+        // 폴리곤도 재표시
+        if (kakaoGisRef.current.directionPolygon && map && angle !== undefined) {
+          kakaoGisRef.current.directionPolygon.setMap(null);
+          createKakaoDirectionPolygon(pos, angle, map);
         }
       }, 150);
     };
@@ -393,7 +531,7 @@ const MapPane: React.FC<MapPaneProps> = ({
       content.style.backgroundSize = 'contain';
       content.style.backgroundPosition = 'center';
       content.style.backgroundRepeat = 'no-repeat';
-      content.style.transformOrigin = 'center bottom'; // 회전 중심을 하단 중앙으로 설정
+      content.style.transformOrigin = 'center center'; // 회전 중심을 중앙으로 설정 (방향 비추기)
       if (angle !== undefined) {
         content.style.transform = `rotate(${angle}deg)`;
       }
@@ -402,12 +540,77 @@ const MapPane: React.FC<MapPaneProps> = ({
         position: pos,
         content: content,
         map: map,
-        yAnchor: 1, // 하단 기준으로 앵커 설정
+        yAnchor: 0.5, // 중심 기준으로 앵커 설정 (PanoID point에 일치)
         zIndex: 1000
       });
+      
+      // 방향 표시 폴리곤 생성
+      if (angle !== undefined && map) {
+        createKakaoDirectionPolygon(pos, angle, map);
+      }
     };
     
     img.src = 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/walker.png';
+  }, [createKakaoDirectionPolygon]);
+
+  // 네이버맵 방향 표시 폴리곤 생성 (원뿔형)
+  const createNaverDirectionPolygon = useCallback((centerPos: any, angle: number, map: any) => {
+    // 기존 폴리곤 제거
+    if (naverDirectionPolygonRef.current) {
+      naverDirectionPolygonRef.current.setMap(null);
+      naverDirectionPolygonRef.current = null;
+    }
+
+    // 원뿔형 폴리곤 파라미터
+    const coneRadiusMeters = 50; // 약 50m
+    const coneAngle = 60; // 원뿔 각도 (도)
+    const coneHalfAngle = coneAngle / 2; // 원뿔 반각
+
+    // 중심점 좌표
+    const centerLat = centerPos.lat();
+    const centerLng = centerPos.lng();
+
+    // 미터를 위도/경도로 변환 (지구 곡률 고려)
+    const latToMeters = 111320; // 1도 위도 ≈ 111,320m
+    const lngToMeters = 111320 * Math.cos(centerLat * Math.PI / 180); // 경도는 위도에 따라 다름
+    const coneRadiusLat = coneRadiusMeters / latToMeters;
+    const coneRadiusLng = coneRadiusMeters / lngToMeters;
+
+    // 방향 각도를 라디안으로 변환 (네이버맵은 시계방향, 북쪽이 0도)
+    // 네이버맵 각도: 북쪽 0도, 시계방향 증가
+    const angleRad = ((angle - 90) * Math.PI) / 180; // 지도 좌표계로 변환 (동쪽이 0도)
+
+    // 원뿔 끝점 계산 (방향으로 coneRadius만큼 이동)
+    const endLat = centerLat + coneRadiusLat * Math.sin(angleRad);
+    const endLng = centerLng + coneRadiusLng * Math.cos(angleRad);
+    const endPos = new window.naver.maps.LatLng(endLat, endLng);
+
+    // 원뿔 좌우 끝점 계산 (원뿔의 30% 지점)
+    const leftAngleRad = angleRad - (coneHalfAngle * Math.PI) / 180;
+    const rightAngleRad = angleRad + (coneHalfAngle * Math.PI) / 180;
+
+    const leftLat = centerLat + coneRadiusLat * 0.3 * Math.sin(leftAngleRad);
+    const leftLng = centerLng + coneRadiusLng * 0.3 * Math.cos(leftAngleRad);
+    const leftPos = new window.naver.maps.LatLng(leftLat, leftLng);
+
+    const rightLat = centerLat + coneRadiusLat * 0.3 * Math.sin(rightAngleRad);
+    const rightLng = centerLng + coneRadiusLng * 0.3 * Math.cos(rightAngleRad);
+    const rightPos = new window.naver.maps.LatLng(rightLat, rightLng);
+
+    // 원뿔형 폴리곤 경로 (역삼각형: 중심점 -> 좌측 -> 끝점 -> 우측 -> 중심점)
+    const path = [centerPos, leftPos, endPos, rightPos, centerPos];
+
+    // 폴리곤 생성
+    naverDirectionPolygonRef.current = new window.naver.maps.Polygon({
+      map: map,
+      paths: path,
+      strokeWeight: 0,
+      strokeColor: '#4A90E2',
+      strokeOpacity: 0,
+      fillColor: '#4A90E2',
+      fillOpacity: 0.3, // 반투명 파란색
+      zIndex: 999 // marker 아래에 표시
+    });
   }, []);
 
   // 네이버맵 삼각형 마커 생성 헬퍼 함수
@@ -425,7 +628,7 @@ const MapPane: React.FC<MapPaneProps> = ({
     return {
       url: url,
       size: new window.naver.maps.Size(size, size),
-      anchor: new window.naver.maps.Point(size / 2, size / 2),
+      anchor: new window.naver.maps.Point(size / 2, size / 2), // 중심 기준 (PanoID point에 일치)
       scaledSize: new window.naver.maps.Size(size, size)
     };
   }, []);
@@ -499,15 +702,16 @@ const MapPane: React.FC<MapPaneProps> = ({
         if (mapRef.current) {
           mapRef.current.setCenter(pos);
         }
-        // Sync Marker - 미니맵 중앙에 위치 (삼각형 마커, 방향 표시)
+        // Sync Marker - 미니맵 중앙에 위치 (삼각형 마커, 방향 동기화)
         if (naverMarkerRef.current) {
           naverMarkerRef.current.setPosition(pos);
+          // 방향 동기화: 거리뷰 방향에 따라 마커 회전
           naverMarkerRef.current.setIcon(createNaverTriangleMarker(angle));
           if (typeof naverMarkerRef.current.setAngle === 'function') {
             naverMarkerRef.current.setAngle(angle);
           }
         } else {
-          // 마커가 없으면 생성 (삼각형 마커)
+          // 마커가 없으면 생성 (삼각형 마커, 방향 포함)
           const icon = createNaverTriangleMarker(angle);
           naverMarkerRef.current = new window.naver.maps.Marker({
             position: pos,
@@ -516,17 +720,32 @@ const MapPane: React.FC<MapPaneProps> = ({
             angle: angle
           });
         }
+        // 방향 표시 폴리곤 생성/업데이트
+        if (mapRef.current) {
+          createNaverDirectionPolygon(pos, angle, mapRef.current);
+        }
       });
 
-      // 파노라마 시점 변경 이벤트 (방향 업데이트)
+      // 파노라마 시점 변경 이벤트 (방향 업데이트 및 동기화)
       window.naver.maps.Event.addListener(pano, 'pov_changed', () => {
         const pov = pano.getPov();
         const angle = pov ? pov.pan : 0;
+        const pos = pano.getPosition();
         if (naverMarkerRef.current) {
+          // 마커 아이콘 업데이트 (방향 반영)
           naverMarkerRef.current.setIcon(createNaverTriangleMarker(angle));
+          // 네이버맵 API의 setAngle 메서드가 있으면 사용
           if (typeof naverMarkerRef.current.setAngle === 'function') {
             naverMarkerRef.current.setAngle(angle);
           }
+          // 마커 위치도 업데이트 (거리뷰 위치와 동기화)
+          if (pos) {
+            naverMarkerRef.current.setPosition(pos);
+          }
+        }
+        // 방향 표시 폴리곤 업데이트
+        if (pos && mapRef.current) {
+          createNaverDirectionPolygon(pos, angle, mapRef.current);
         }
       });
     } catch (error) {
@@ -772,6 +991,7 @@ const MapPane: React.FC<MapPaneProps> = ({
                   
                   const positionListener = () => {
                     const rvPos = rv.getPosition();
+                    const viewpoint = rv.getViewpoint();
                     if (kakaoGisRef.current.walkerOverlay && mapRef.current) {
                       kakaoGisRef.current.walkerOverlay.setPosition(rvPos);
                       kakaoGisRef.current.walkerOverlay.setMap(mapRef.current);
@@ -779,16 +999,31 @@ const MapPane: React.FC<MapPaneProps> = ({
                     if (mapRef.current) {
                       mapRef.current.setCenter(rvPos);
                     }
+                    // 방향 표시 폴리곤 업데이트
+                    if (rvPos && mapRef.current && viewpoint) {
+                      createKakaoDirectionPolygon(rvPos, viewpoint.pan, mapRef.current);
+                    }
                   };
                   
                   const viewpointListener = () => {
                     const viewpoint = rv.getViewpoint();
+                    const rvPos = rv.getPosition();
                     if (kakaoGisRef.current.walkerOverlay) {
                       const content = kakaoGisRef.current.walkerOverlay.getContent();
                       if (content) {
-                        content.style.transformOrigin = 'center bottom'; // 회전 중심을 하단 중앙으로 설정
+                        // 방향 비추기: 거리뷰 방향에 따라 walker 회전
+                        content.style.transformOrigin = 'center center'; // 중심 기준 회전
                         content.style.transform = `rotate(${viewpoint.pan}deg)`;
                       }
+                      // Walker 위치도 거리뷰 위치와 동기화
+                      if (rvPos && mapRef.current) {
+                        kakaoGisRef.current.walkerOverlay.setPosition(rvPos);
+                        kakaoGisRef.current.walkerOverlay.setMap(mapRef.current);
+                      }
+                    }
+                    // 방향 표시 폴리곤 업데이트
+                    if (rvPos && mapRef.current && viewpoint) {
+                      createKakaoDirectionPolygon(rvPos, viewpoint.pan, mapRef.current);
                     }
                   };
                   
@@ -851,6 +1086,10 @@ const MapPane: React.FC<MapPaneProps> = ({
                     naverMarkerRef.current.setAngle(angle);
                   }
                 }
+                // 방향 표시 폴리곤 생성/업데이트
+                if (mapRef.current) {
+                  createNaverDirectionPolygon(latlng, angle, mapRef.current);
+                }
               }
             }, 200);
             return;
@@ -895,6 +1134,10 @@ const MapPane: React.FC<MapPaneProps> = ({
               if (typeof naverMarkerRef.current.setAngle === 'function') {
                 naverMarkerRef.current.setAngle(angle);
               }
+            }
+            // 방향 표시 폴리곤 생성/업데이트
+            if (mapRef.current) {
+              createNaverDirectionPolygon(latlng, angle, mapRef.current);
             }
           }, 300);
         }, 150);
@@ -945,6 +1188,10 @@ const MapPane: React.FC<MapPaneProps> = ({
             icon: icon,
             angle: angle
           });
+        }
+        // 방향 표시 폴리곤 생성/업데이트
+        if (mapRef.current) {
+          createNaverDirectionPolygon(latlng, angle, mapRef.current);
         }
       }
     }
@@ -1012,6 +1259,10 @@ const MapPane: React.FC<MapPaneProps> = ({
                                             naverMarkerRef.current.setAngle(angle);
                                         }
                                     }
+                                    // 방향 표시 폴리곤 생성/업데이트
+                                    if (mapRef.current) {
+                                        createNaverDirectionPolygon(latlng, angle, mapRef.current);
+                                    }
                                 }
                             }, 200);
                             return;
@@ -1059,6 +1310,10 @@ const MapPane: React.FC<MapPaneProps> = ({
                                 if (typeof naverMarkerRef.current.setAngle === 'function') {
                                     naverMarkerRef.current.setAngle(angle);
                                 }
+                            }
+                            // 방향 표시 폴리곤 생성/업데이트
+                            if (mapRef.current) {
+                                createNaverDirectionPolygon(latlng, angle, mapRef.current);
                             }
                         }, 300);
                     } catch (error) {
@@ -1478,12 +1733,17 @@ const MapPane: React.FC<MapPaneProps> = ({
                    
                    const viewpointListener = () => {
                      const viewpoint = rv.getViewpoint();
+                     const rvPos = rv.getPosition();
                      if (kakaoGisRef.current.walkerOverlay) {
                        const content = kakaoGisRef.current.walkerOverlay.getContent();
                        if (content) {
-                         content.style.transformOrigin = 'center bottom'; // 회전 중심을 하단 중앙으로 설정
+                         content.style.transformOrigin = 'center center'; // 회전 중심을 중앙으로 설정 (방향 비추기)
                          content.style.transform = `rotate(${viewpoint.pan}deg)`;
                        }
+                     }
+                     // 방향 표시 폴리곤 업데이트
+                     if (rvPos && mapRef.current && viewpoint) {
+                       createKakaoDirectionPolygon(rvPos, viewpoint.pan, mapRef.current);
                      }
                    };
                    
@@ -1554,6 +1814,10 @@ const MapPane: React.FC<MapPaneProps> = ({
               kakaoGisRef.current.walkerOverlay.setMap(null);
               kakaoGisRef.current.walkerOverlay = null;
           }
+          if (kakaoGisRef.current.directionPolygon) {
+              kakaoGisRef.current.directionPolygon.setMap(null);
+              kakaoGisRef.current.directionPolygon = null;
+          }
           mapRef.current.setCursor('default');
           setGisMode(GISMode.DEFAULT);
       }
@@ -1568,6 +1832,10 @@ const MapPane: React.FC<MapPaneProps> = ({
             naverMarkerRef.current.setMap(null);
             // 마커는 유지 (다음에 다시 사용할 수 있도록)
         }
+        if (naverDirectionPolygonRef.current) {
+            naverDirectionPolygonRef.current.setMap(null);
+            naverDirectionPolygonRef.current = null;
+        }
     }
   };
 
@@ -1578,9 +1846,18 @@ const MapPane: React.FC<MapPaneProps> = ({
         ref={containerRef} 
         className={`transition-all duration-300 ease-in-out bg-white
           ${isStreetViewActive 
-            ? 'absolute bottom-3 left-3 w-[240px] h-[240px] z-[100] border-4 border-white shadow-2xl rounded-lg overflow-hidden' 
+            ? 'absolute w-[240px] h-[240px] z-[100] border-4 border-white shadow-2xl rounded-lg overflow-hidden' 
             : 'w-full h-full z-0'
           }`}
+        style={isStreetViewActive ? {
+          position: 'absolute',
+          bottom: '12px',  // bottom-3 = 0.75rem = 12px
+          left: '12px',    // left-3 = 0.75rem = 12px
+          top: 'auto',
+          right: 'auto',
+          width: '240px',
+          height: '240px'
+        } : {}}
       />
 
       {/* 2. Street View Containers */}

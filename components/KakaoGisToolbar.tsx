@@ -11,7 +11,7 @@ interface KakaoGisToolbarProps {
 
 const KakaoGisToolbar: React.FC<KakaoGisToolbarProps> = ({ activeMode, onAction, onToggleCadastral, onClear }) => {
   return (
-    <div className="absolute top-4 right-14 z-20 flex bg-white rounded-md shadow-lg border border-gray-300 overflow-hidden">
+    <div className="absolute top-4 right-[300px] z-20 flex bg-white rounded-md shadow-lg border border-gray-300 overflow-hidden">
       <button 
         onClick={() => onAction(GISMode.ROADVIEW)}
         title="로드뷰"
