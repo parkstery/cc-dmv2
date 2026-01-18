@@ -42,6 +42,7 @@ const MapPane: React.FC<MapPaneProps> = ({
   const naverPanoContainerRef = useRef<HTMLDivElement>(null);
   const naverMarkerRef = useRef<any>(null); // Marker on Mini-map
   const naverDirectionPolygonRef = useRef<any>(null); // 방향 표시 폴리곤 (원뿔형)
+  const naverMarkerIconUrlRef = useRef<string | null>(null); // 마커 아이콘 URL (메모리 정리용)
   const [isNaverLayerOn, setIsNaverLayerOn] = useState(false);
   
   // Kakao Refs & Drawing State
@@ -156,6 +157,10 @@ const MapPane: React.FC<MapPaneProps> = ({
         if (naverPanoramaRef.current) naverPanoramaRef.current = null;
         if (naverMarkerRef.current) { naverMarkerRef.current.setMap(null); naverMarkerRef.current = null; }
         if (naverDirectionPolygonRef.current) { naverDirectionPolygonRef.current.setMap(null); naverDirectionPolygonRef.current = null; }
+        if (naverMarkerIconUrlRef.current) { 
+          URL.revokeObjectURL(naverMarkerIconUrlRef.current); 
+          naverMarkerIconUrlRef.current = null; 
+        }
         if (naverPanoContainerRef.current) naverPanoContainerRef.current.innerHTML = '';
         if (naverStreetLayerRef.current) naverStreetLayerRef.current = null;
     }
@@ -615,15 +620,26 @@ const MapPane: React.FC<MapPaneProps> = ({
 
   // 네이버맵 삼각형 마커 생성 헬퍼 함수
   const createNaverTriangleMarker = useCallback((angle: number = 0) => {
+    // 이전 URL 정리 (메모리 누수 방지)
+    if (naverMarkerIconUrlRef.current) {
+      URL.revokeObjectURL(naverMarkerIconUrlRef.current);
+      naverMarkerIconUrlRef.current = null;
+    }
+    
     // SVG로 삼각형 마커 생성 (빨간색 삼각형, 방향 표시)
     const size = 24;
+    // 네이버맵 각도: 북쪽 0도, 시계방향 증가 (-180 ~ 180 범위)
+    // SVG는 기본적으로 위쪽(북쪽)을 향하므로, 각도를 그대로 적용
     const svg = `
       <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12,2 L22,20 L2,20 Z" fill="#FF3333" stroke="#FFFFFF" stroke-width="2"/>
+        <g transform="rotate(${angle} ${size/2} ${size/2})">
+          <path d="M12,2 L22,20 L2,20 Z" fill="#FF3333" stroke="#FFFFFF" stroke-width="2"/>
+        </g>
       </svg>
     `;
     const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
+    naverMarkerIconUrlRef.current = url; // URL 저장 (나중에 정리용)
     
     return {
       url: url,
@@ -731,18 +747,19 @@ const MapPane: React.FC<MapPaneProps> = ({
         const pov = pano.getPov();
         const angle = pov ? pov.pan : 0;
         const pos = pano.getPosition();
-        if (naverMarkerRef.current) {
+        
+        if (naverMarkerRef.current && mapRef.current && pos) {
+          // 새로운 아이콘 생성 (각도 반영)
+          const newIcon = createNaverTriangleMarker(angle);
+          
           // 마커 아이콘 업데이트 (방향 반영)
-          naverMarkerRef.current.setIcon(createNaverTriangleMarker(angle));
-          // 네이버맵 API의 setAngle 메서드가 있으면 사용
-          if (typeof naverMarkerRef.current.setAngle === 'function') {
-            naverMarkerRef.current.setAngle(angle);
-          }
-          // 마커 위치도 업데이트 (거리뷰 위치와 동기화)
-          if (pos) {
-            naverMarkerRef.current.setPosition(pos);
-          }
+          // setIcon이 즉시 반영되지 않을 수 있으므로, 마커를 지도에서 제거 후 다시 추가
+          naverMarkerRef.current.setMap(null);
+          naverMarkerRef.current.setIcon(newIcon);
+          naverMarkerRef.current.setPosition(pos);
+          naverMarkerRef.current.setMap(mapRef.current);
         }
+        
         // 방향 표시 폴리곤 업데이트
         if (pos && mapRef.current) {
           createNaverDirectionPolygon(pos, angle, mapRef.current);
@@ -1835,6 +1852,10 @@ const MapPane: React.FC<MapPaneProps> = ({
         if (naverDirectionPolygonRef.current) {
             naverDirectionPolygonRef.current.setMap(null);
             naverDirectionPolygonRef.current = null;
+        }
+        if (naverMarkerIconUrlRef.current) {
+            URL.revokeObjectURL(naverMarkerIconUrlRef.current);
+            naverMarkerIconUrlRef.current = null;
         }
     }
   };
